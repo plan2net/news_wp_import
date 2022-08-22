@@ -1,0 +1,13 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  StudioMitte\NewsWpImport\:
+    resource: '../Classes/*'
+
+  StudioMitte\NewsWpImport\Command\ImportCommand:
+    tags:
+      - { name: 'console.command', command: 'wp2news:import' }
+

@@ -1,0 +1,36 @@
+{
+    "name": "studiomitte/news-wp-import",
+    "type": "typo3-cms-extension",
+    "description": "Import WordPress into EXT:news",
+    "keywords": [
+        "TYPO3",
+        "extension",
+        "article",
+        "news",
+        "wordpress",
+        "import"
+    ],
+    "homepage": "https://studiomitte.com",
+    "authors": [
+        {
+            "name": "Georg Ringer",
+            "role": "Developer"
+        }
+    ],
+    "license": [
+        "GPL-2.0-or-later"
+    ],
+    "require": {
+        "georgringer/news": "^8 || ^9"
+    },
+    "autoload": {
+        "psr-4": {
+            "StudioMitte\\NewsWpImport\\": "Classes"
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "news_wp_import"
+        }
+    }
+}
