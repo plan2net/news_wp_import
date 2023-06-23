@@ -31,6 +31,8 @@ class RelationImporter extends BaseImporter
                 'shortcut' => 0,
                 'single_pid' => 0,
                 'pid' => $pid,
+                 // @todo: get field value via DB from WP
+                'description' => ''
             ];
         }
         /** @var CategoryImportService $categoryService */
