@@ -21,7 +21,7 @@
         "GPL-2.0-or-later"
     ],
     "require": {
-        "georgringer/news": "^8 || ^9"
+        "georgringer/news": "^11"
     },
     "autoload": {
         "psr-4": {
