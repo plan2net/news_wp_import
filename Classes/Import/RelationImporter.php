@@ -32,7 +32,8 @@ class RelationImporter extends BaseImporter
                 'single_pid' => 0,
                 'pid' => $pid,
                  // @todo: get field value via DB from WP
-                'description' => ''
+                'description' => '',
+                'parentcategory' => 0
             ];
         }
         /** @var CategoryImportService $categoryService */
