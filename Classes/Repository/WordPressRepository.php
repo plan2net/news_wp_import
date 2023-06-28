@@ -24,37 +24,146 @@ class WordPressRepository
         return $queryBuilder
             ->select('*')
             ->from('wp_posts', 'p')
-             ->join('p', 'wp_icl_translations', 't', 't.element_id = p.ID')
-             ->where(
-                $queryBuilder->expr()->eq('post_status', $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)),
+            ->join('p', 'wp_icl_translations', 't', 't.element_id = p.ID')
+            ->where(
+                $queryBuilder->expr()->eq(
+                    'post_status',
+                    $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)
+                ),
                 $queryBuilder->expr()->eq('post_type', $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR))
             )
-             ->andWhere($queryBuilder->expr()->eq('t.element_type', $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)))
-             ->andWhere($queryBuilder->expr()->eq('t.language_code', $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)))
-             ->orderBy('ID', 'desc')
-             ->execute()
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    't.element_type',
+                    $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq('t.language_code', $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR))
+            )
+            ->orderBy('ID', 'desc')
+            ->execute()
             ->fetchAll();
     }
 
-    public function getPostsEnglishLanguage(): array
+    public function getPostsEnglishLanguageWithGermanParent(): array
     {
         $queryBuilder = $this->connection->createQueryBuilder();
 
         return $queryBuilder
-            ->select('*' )
+            ->select('*')
             ->from('wp_posts', 'p')
             ->join('p', 'wp_icl_translations', 'tenglish', 'tenglish.element_id = p.ID')
             ->join('tenglish', 'wp_icl_translations', 'tgerman', 'tenglish.trid = tgerman.trid')
             ->where(
-                $queryBuilder->expr()->eq('post_status', $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)),
+                $queryBuilder->expr()->eq(
+                    'post_status',
+                    $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)
+                ),
                 $queryBuilder->expr()->eq('post_type', $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR))
             )
-            ->andWhere($queryBuilder->expr()->eq('tenglish.element_type', $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)))
-            ->andWhere($queryBuilder->expr()->eq('tenglish.language_code', $queryBuilder->createNamedParameter('en', \PDO::PARAM_STR)))
-            ->andWhere($queryBuilder->expr()->eq('tgerman.language_code', $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)))
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.element_type',
+                    $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.language_code',
+                    $queryBuilder->createNamedParameter('en', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tgerman.language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.source_language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )
             ->orderBy('ID', 'desc')
             ->execute()
             ->fetchAll();
+    }
+
+    public function getGermanUidForEnglishTranslation(int $englishTranslationId): int
+    {
+        $queryBuilder = $this->connection->createQueryBuilder();
+
+        return $queryBuilder
+            ->select(
+                'tgerman.element_id AS german_id'
+            )
+            ->from('wp_posts', 'p')
+            ->join('p', 'wp_icl_translations', 'tenglish', 'tenglish.element_id = p.ID')
+            ->join('tenglish', 'wp_icl_translations', 'tgerman', 'tenglish.trid = tgerman.trid')
+            ->where(
+                $queryBuilder->expr()->eq(
+                    'post_status',
+                    $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)
+                ),
+                $queryBuilder->expr()->eq(
+                    'post_type',
+                    $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.element_type',
+                    $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.language_code',
+                    $queryBuilder->createNamedParameter('en', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tgerman.language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.source_language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.element_id',
+                    $queryBuilder->createNamedParameter($englishTranslationId, \PDO::PARAM_INT)
+                )
+            )
+            ->execute()
+            ->fetchOne();
+    }
+
+    public function getNewsGermanUidForEnglishTranslation(int $germanImportUid): array
+    {
+        $queryBuilder = $this->connection->createQueryBuilder();
+
+        return $queryBuilder
+            ->select(
+                'news.import_id'
+            )
+            ->from('tx_news_domain_model_news', 'news')
+
+            ->where(
+                $queryBuilder->expr()->eq(
+                    'news.import_id',
+                    $queryBuilder->createNamedParameter($germanImportUid, \PDO::PARAM_INT)
+                )
+            )
+
+            ->execute()
+            ->fetchOne();
     }
 
     public function getAttachments(int $id): array
@@ -72,7 +181,10 @@ class WordPressRepository
             )
             ->where(
                 $queryBuilder->expr()->eq('post_id', $queryBuilder->createNamedParameter($id, \PDO::PARAM_INT)),
-                $queryBuilder->expr()->eq('post_type', $queryBuilder->createNamedParameter('attachment', \PDO::PARAM_STR))
+                $queryBuilder->expr()->eq(
+                    'post_type',
+                    $queryBuilder->createNamedParameter('attachment', \PDO::PARAM_STR)
+                )
             )
             ->execute()
             ->fetchAll();
@@ -81,6 +193,7 @@ class WordPressRepository
     public function getRelations(int $id): array
     {
         $queryBuilder = $this->connection->createQueryBuilder();
+
         return $queryBuilder
             ->select('taxonomy', 'name')
             ->from('wp_term_relationships')
@@ -88,16 +201,25 @@ class WordPressRepository
                 'wp_term_relationships',
                 'wp_term_taxonomy',
                 'wp_term_taxonomy',
-                $queryBuilder->expr()->eq('wp_term_relationships.term_taxonomy_id', $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_taxonomy_id'))
+                $queryBuilder->expr()->eq(
+                    'wp_term_relationships.term_taxonomy_id',
+                    $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_taxonomy_id')
+                )
             )
             ->leftJoin(
                 'wp_term_taxonomy',
                 'wp_terms',
                 'wp_terms',
-                $queryBuilder->expr()->eq('wp_terms.term_id', $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_id'))
+                $queryBuilder->expr()->eq(
+                    'wp_terms.term_id',
+                    $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_id')
+                )
             )
             ->where(
-                $queryBuilder->expr()->eq('wp_term_relationships.object_id', $queryBuilder->createNamedParameter($id, \PDO::PARAM_INT))
+                $queryBuilder->expr()->eq(
+                    'wp_term_relationships.object_id',
+                    $queryBuilder->createNamedParameter($id, \PDO::PARAM_INT)
+                )
             )
             ->execute()
             ->fetchAll();
@@ -116,6 +238,7 @@ class WordPressRepository
     private function getTaxonomyItems(string $taxonomy): array
     {
         $queryBuilder = $this->connection->createQueryBuilder();
+
         return $queryBuilder
             ->select('taxonomy', 'name', 'wp_terms.term_id')
             ->from('wp_term_taxonomy')
@@ -123,7 +246,10 @@ class WordPressRepository
                 'wp_term_taxonomy',
                 'wp_terms',
                 'wp_terms',
-                $queryBuilder->expr()->eq('wp_terms.term_id', $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_id'))
+                $queryBuilder->expr()->eq(
+                    'wp_terms.term_id',
+                    $queryBuilder->quoteIdentifier('wp_term_taxonomy.term_id')
+                )
             )
             ->where(
                 $queryBuilder->expr()->eq('taxonomy', $queryBuilder->createNamedParameter($taxonomy, \PDO::PARAM_STR))

@@ -17,15 +17,28 @@ class NewsImporter extends BaseImporter
     public function run(int $pid): int
     {
         $this->fillRelations();
-        $items = [];
 
+        /** @var NewsImportService $importService */
+        $importService = $this->objectManager->get(NewsImportService::class);
+        $settings = [
+            'findCategoriesByImportSource' => $this->sourceIdentifier
+        ];
+
+        $importService->import($this->getGermanPosts($pid), [], $settings);
+        $importService->import($this->getEnglishPosts($pid), [], $settings);
+
+        return 0;
+    }
+
+    private function getGermanPosts(int $pid): array {
+        $items = [];
         foreach ($this->wordPressRepository->getPostsGermanLanguage() as $row) {
             $single = [
                 'import_source' => $this->sourceIdentifier,
                 'import_id' => $row['ID'],
                 'crdate' => 0,
                 'hidden' => 0,
-                'type' => 0,
+                'type' => 3,
                 'title' => $row['post_title'],
                 'path_segment' => $row['post_name'],
                 'pid' => $pid,
@@ -40,27 +53,27 @@ class NewsImporter extends BaseImporter
             $this->cleanup($single);
             $items[] = $single;
         }
+        return $items;
+    }
 
-        /** @var NewsImportService $importService */
-        $importService = $this->objectManager->get(NewsImportService::class);
-        $settings = [
-            'findCategoriesByImportSource' => $this->sourceIdentifier
-        ];
-
-        foreach ($this->wordPressRepository->getPostsEnglishLanguage() as $row) {
+    private function getEnglishPosts(int $pid): array {
+        $items = [];
+        foreach ($this->wordPressRepository->getPostsEnglishLanguageWithGermanParent() as $row) {
+            $germanParentUid = $this->wordPressRepository->getGermanUidForEnglishTranslation($row['ID']);
             $single = [
                 'import_source' => $this->sourceIdentifier,
                 'import_id' => $row['ID'],
                 'crdate' => 0,
                 'hidden' => 0,
-                'type' => 0,
+                'type' => 3,
                 'title' => $row['post_title'],
                 'path_segment' => $row['post_name'],
                 'pid' => $pid,
                 'media' => $this->getAttachements($row['ID']),
                 'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
                 'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
-                'sys_language_uid' => 1
+                'sys_language_uid' => 1,
+                'l10n_parent' => $germanParentUid
             ];
             $this->addContent($row['post_content'], $single);
             $this->addRelations($row['ID'], $single);
@@ -68,10 +81,7 @@ class NewsImporter extends BaseImporter
             $this->cleanup($single);
             $items[] = $single;
         }
-
-        $importService->import($items, [], $settings);
-
-        return count($items);
+        return $items;
     }
 
     protected function cleanup(array &$row): void
