@@ -19,7 +19,7 @@ class NewsImporter extends BaseImporter
         $this->fillRelations();
         $items = [];
 
-        foreach ($this->wordPressRepository->getPosts() as $row) {
+        foreach ($this->wordPressRepository->getPostsGermanLanguage() as $row) {
             $single = [
                 'import_source' => $this->sourceIdentifier,
                 'import_id' => $row['ID'],
@@ -31,7 +31,8 @@ class NewsImporter extends BaseImporter
                 'pid' => $pid,
                 'media' => $this->getAttachements($row['ID']),
                 'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
-                'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp()
+                'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
+                'sys_language_uid' => 0
             ];
             $this->addContent($row['post_content'], $single);
             $this->addRelations($row['ID'], $single);
@@ -45,6 +46,29 @@ class NewsImporter extends BaseImporter
         $settings = [
             'findCategoriesByImportSource' => $this->sourceIdentifier
         ];
+
+        foreach ($this->wordPressRepository->getPostsEnglishLanguage() as $row) {
+            $single = [
+                'import_source' => $this->sourceIdentifier,
+                'import_id' => $row['ID'],
+                'crdate' => 0,
+                'hidden' => 0,
+                'type' => 0,
+                'title' => $row['post_title'],
+                'path_segment' => $row['post_name'],
+                'pid' => $pid,
+                'media' => $this->getAttachements($row['ID']),
+                'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
+                'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
+                'sys_language_uid' => 1
+            ];
+            $this->addContent($row['post_content'], $single);
+            $this->addRelations($row['ID'], $single);
+
+            $this->cleanup($single);
+            $items[] = $single;
+        }
+
         $importService->import($items, [], $settings);
 
         return count($items);

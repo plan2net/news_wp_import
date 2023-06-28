@@ -17,17 +17,41 @@ class WordPressRepository
         $this->connection = GeneralUtility::makeInstance(ConnectionPool::class)->getConnectionByName($databaseName);
     }
 
-    public function getPosts(): array
+    public function getPostsGermanLanguage(): array
     {
         $queryBuilder = $this->connection->createQueryBuilder();
 
         return $queryBuilder
             ->select('*')
-            ->from('wp_posts')
+            ->from('wp_posts', 'p')
+             ->join('p', 'wp_icl_translations', 't', 't.element_id = p.ID')
+             ->where(
+                $queryBuilder->expr()->eq('post_status', $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)),
+                $queryBuilder->expr()->eq('post_type', $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR))
+            )
+             ->andWhere($queryBuilder->expr()->eq('t.element_type', $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)))
+             ->andWhere($queryBuilder->expr()->eq('t.language_code', $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)))
+             ->orderBy('ID', 'desc')
+             ->execute()
+            ->fetchAll();
+    }
+
+    public function getPostsEnglishLanguage(): array
+    {
+        $queryBuilder = $this->connection->createQueryBuilder();
+
+        return $queryBuilder
+            ->select('*' )
+            ->from('wp_posts', 'p')
+            ->join('p', 'wp_icl_translations', 'tenglish', 'tenglish.element_id = p.ID')
+            ->join('tenglish', 'wp_icl_translations', 'tgerman', 'tenglish.trid = tgerman.trid')
             ->where(
                 $queryBuilder->expr()->eq('post_status', $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)),
                 $queryBuilder->expr()->eq('post_type', $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR))
             )
+            ->andWhere($queryBuilder->expr()->eq('tenglish.element_type', $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)))
+            ->andWhere($queryBuilder->expr()->eq('tenglish.language_code', $queryBuilder->createNamedParameter('en', \PDO::PARAM_STR)))
+            ->andWhere($queryBuilder->expr()->eq('tgerman.language_code', $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)))
             ->orderBy('ID', 'desc')
             ->execute()
             ->fetchAll();
