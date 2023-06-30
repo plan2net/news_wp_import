@@ -91,13 +91,13 @@ class WordPressRepository
             ->fetchAll();
     }
 
-    public function getGermanUidForEnglishTranslation(int $englishTranslationId): int
+    public function getPostEnglishLanguageWithGermanParentByGivenTheImportId(int $germanImportUid): array
     {
         $queryBuilder = $this->connection->createQueryBuilder();
 
         return $queryBuilder
-            ->select(
-                'tgerman.element_id AS german_id'
+            ->select('p.*',
+                'tenglish.element_id AS english_id'
             )
             ->from('wp_posts', 'p')
             ->join('p', 'wp_icl_translations', 'tenglish', 'tenglish.element_id = p.ID')
@@ -137,34 +137,65 @@ class WordPressRepository
                 )
             )->andWhere(
                 $queryBuilder->expr()->eq(
-                    'tenglish.element_id',
-                    $queryBuilder->createNamedParameter($englishTranslationId, \PDO::PARAM_INT)
-                )
-            )
-            ->execute()
-            ->fetchOne();
-    }
-
-    public function getNewsGermanUidForEnglishTranslation(int $germanImportUid): array
-    {
-        $queryBuilder = $this->connection->createQueryBuilder();
-
-        return $queryBuilder
-            ->select(
-                'news.import_id'
-            )
-            ->from('tx_news_domain_model_news', 'news')
-
-            ->where(
-                $queryBuilder->expr()->eq(
-                    'news.import_id',
+                    'tgerman.element_id',
                     $queryBuilder->createNamedParameter($germanImportUid, \PDO::PARAM_INT)
                 )
             )
-
             ->execute()
-            ->fetchOne();
+            ->fetchAllAssociative();
     }
+
+    public function getUidOfPostsThatHaveAnEnglishTranslation(): array
+    {
+        $queryBuilder = $this->connection->createQueryBuilder();
+
+        $result = $queryBuilder
+            ->select(
+                'tgerman.element_id'
+            )
+            ->from('wp_posts', 'p')
+            ->join('p', 'wp_icl_translations', 'tenglish', 'tenglish.element_id = p.ID')
+            ->join('tenglish', 'wp_icl_translations', 'tgerman', 'tenglish.trid = tgerman.trid')
+            ->where(
+                $queryBuilder->expr()->eq(
+                    'post_status',
+                    $queryBuilder->createNamedParameter('publish', \PDO::PARAM_STR)
+                ),
+                $queryBuilder->expr()->eq(
+                    'post_type',
+                    $queryBuilder->createNamedParameter('post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.element_type',
+                    $queryBuilder->createNamedParameter('post_post', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.language_code',
+                    $queryBuilder->createNamedParameter('en', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tgerman.language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )
+            ->andWhere(
+                $queryBuilder->expr()->eq(
+                    'tenglish.source_language_code',
+                    $queryBuilder->createNamedParameter('de', \PDO::PARAM_STR)
+                )
+            )
+            ->execute()
+            ->fetchAll();
+
+        return array_column($result, 'element_id');
+    }
+
 
     public function getAttachments(int $id): array
     {

@@ -56,7 +56,7 @@ class ImportCommand extends Command
         $importer = GeneralUtility::makeInstance(NewsImporter::class, $database, $name);
         $counter = $importer->run($pid);
 
-        $io->success(sprintf('Imported %s blog posts', $counter));
+        $io->success(sprintf('%s', $counter));
 
         return 0;
     }

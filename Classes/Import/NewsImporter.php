@@ -4,9 +4,9 @@ declare(strict_types=1);
 namespace StudioMitte\NewsWpImport\Import;
 
 use GeorgRinger\News\Domain\Service\NewsImportService;
+
 use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Database\ConnectionPool;
-use TYPO3\CMS\Core\Utility\File\BasicFileUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class NewsImporter extends BaseImporter
@@ -14,7 +14,7 @@ class NewsImporter extends BaseImporter
 
     protected array $categories = [];
 
-    public function run(int $pid): int
+    public function run(int $pid): string
     {
         $this->fillRelations();
 
@@ -23,14 +23,35 @@ class NewsImporter extends BaseImporter
         $settings = [
             'findCategoriesByImportSource' => $this->sourceIdentifier
         ];
+        $germanPosts = $this->getGermanPosts($pid);
+        $importService->import($germanPosts, [], $settings);
 
-        $importService->import($this->getGermanPosts($pid), [], $settings);
-        $importService->import($this->getEnglishPosts($pid), [], $settings);
+        $importedGermanPosts = $this->newsRepository->getNews();
 
-        return 0;
+        $englishPosts = 0;
+
+        foreach ($importedGermanPosts as $germanPost) {
+            $uidsOfGermanPostsThatHaveAnEnglishTranslation =
+                $this->wordPressRepository->getUidOfPostsThatHaveAnEnglishTranslation();
+            if (in_array((int)$germanPost['import_id'], $uidsOfGermanPostsThatHaveAnEnglishTranslation, true)) {
+                $this->dataHandler->localizeRecord($germanPost['uid'], 'tx_news_domain_model_news', 1);
+
+                $importedPost = $this->newsRepository->getLocalizedEnglishPost($germanPost['uid']);
+                foreach ($importedPost as $englishPost) {
+                    $data = $this->getDataToBeChangedForLocalizedEnglishPost($pid, (int)$germanPost['import_id'],);
+                    $this->dataHandler->editRecord($englishPost['uid'], $data, 'tx_news_domain_model_news');
+                }
+                $englishPosts++;
+            }
+        }
+
+        return count(
+                $importedGermanPosts
+            ) . ' german posts and ' . $englishPosts . ' english translations were imported.';
     }
 
-    private function getGermanPosts(int $pid): array {
+    private function getGermanPosts(int $pid): array
+    {
         $items = [];
         foreach ($this->wordPressRepository->getPostsGermanLanguage() as $row) {
             $single = [
@@ -42,7 +63,7 @@ class NewsImporter extends BaseImporter
                 'title' => $row['post_title'],
                 'path_segment' => $row['post_name'],
                 'pid' => $pid,
-                'media' => $this->getAttachements($row['ID']),
+                'media' => $this->getAttachments($row['ID']),
                 'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
                 'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
                 'sys_language_uid' => 0
@@ -53,42 +74,48 @@ class NewsImporter extends BaseImporter
             $this->cleanup($single);
             $items[] = $single;
         }
+
         return $items;
     }
 
-    private function getEnglishPosts(int $pid): array {
-        $items = [];
-        foreach ($this->wordPressRepository->getPostsEnglishLanguageWithGermanParent() as $row) {
-            $germanParentUid = $this->wordPressRepository->getGermanUidForEnglishTranslation($row['ID']);
+    private function getDataToBeChangedForLocalizedEnglishPost(int $pid, int $germanImportPostId): array
+    {
+        $item = [];
+        $row = $this->wordPressRepository->getPostEnglishLanguageWithGermanParentByGivenTheImportId(
+            $germanImportPostId
+        );
+        foreach ($row as $entry) {
             $single = [
                 'import_source' => $this->sourceIdentifier,
-                'import_id' => $row['ID'],
+                'import_id' => $entry['ID'],
                 'crdate' => 0,
                 'hidden' => 0,
                 'type' => 3,
-                'title' => $row['post_title'],
-                'path_segment' => $row['post_name'],
+                'title' => $entry['post_title'],
+                'path_segment' => $entry['post_name'],
                 'pid' => $pid,
-                'media' => $this->getAttachements($row['ID']),
-                'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
-                'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
-                'sys_language_uid' => 1,
-                'l10n_parent' => $germanParentUid
+                'media' => $this->getAttachments($entry['ID']),
+                'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $entry['post_date_gmt'])->getTimestamp(),
+                'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $entry['post_modified'])->getTimestamp(),
             ];
-            $this->addContent($row['post_content'], $single);
-            $this->addRelations($row['ID'], $single);
+            $this->addContent($entry['post_content'], $single);
+            $this->addRelations($entry['ID'], $single);
 
             $this->cleanup($single);
-            $items[] = $single;
+
+            $item = $single;
         }
-        return $items;
+
+        return $item;
     }
 
     protected function cleanup(array &$row): void
     {
+        $pattern = '/(<p>)?\[caption(.*?)\[\/caption\](<\/p>)?/s';
         $removals = ['<!-- /wp:more -->', '<!-- /wp:tadv/classic-paragraph -->', '<!-- wp:tadv/classic-paragraph -->'];
         foreach (['title', 'bodytext'] as $field) {
             $row[$field] = trim(str_replace($removals, '', $row[$field]));
+            $row[$field] = preg_replace($pattern, '', $row[$field], 1);
         }
     }
 
@@ -125,25 +152,27 @@ class NewsImporter extends BaseImporter
                 $content = mb_substr($content, $more + strlen($teaserSearchTerm));
                 $content = str_replace('<p> </p>', '', $content);
                 $row['bodytext'] = trim($content);
+
                 return;
             }
         }
         $row['bodytext'] = trim($content);
     }
 
-    protected function getAttachements(int $id)
+    protected function getAttachments(int $id): array
     {
         $media = [];
 
         foreach ($this->wordPressRepository->getAttachments($id) as $key => $row) {
             $file = $this->getFile($row['guid']);
+
             if (!$file) {
                 continue;
             }
             $media[] = [
                 'image' => $file,
                 'title' => $row['post_title'],
-                'alt' => $row['post_content'],
+                'alt' => $row['post_title'],
                 'showinpreview' => ($key === 0)
             ];
         }
@@ -156,11 +185,13 @@ class NewsImporter extends BaseImporter
         if (!$file) {
             return '';
         }
-        $info = pathinfo($file);
-        $basicFileUtility = GeneralUtility::makeInstance(BasicFileUtility::class);
+        $path_prefix_http = 'http://scilog.fwf.ac.at/content/uploads/';
+        $path_prefix_https = 'https://scilog.fwf.ac.at/content/uploads/';
 
-        $newName = $basicFileUtility->cleanFileName($info['filename']) . '_' . GeneralUtility::shortMD5($file) . '.' . $info['extension'];
-        $newPath = Environment::getPublicPath() . '/fileadmin/import/blog/' . $newName;
+        $identifier = str_replace($path_prefix_https, '', $file);
+        $identifier = str_replace($path_prefix_http, '', $identifier);
+
+        $newPath = Environment::getPublicPath() . '/fileadmin/Scilog/' . $identifier;
         if (!is_file($newPath)) {
             $content = GeneralUtility::getUrl($file);
             if (!$content) {
@@ -170,7 +201,7 @@ class NewsImporter extends BaseImporter
             GeneralUtility::writeFile($newPath, $content);
         }
 
-        return 'fileadmin/import/blog/' . $newName;
+        return '/fileadmin/Scilog/' . $identifier;
     }
 
     private function fillRelations(): void
@@ -180,7 +211,10 @@ class NewsImporter extends BaseImporter
             ->select('import_id', 'title')
             ->from('sys_category')
             ->where(
-                $queryBuilder->expr()->eq('import_source', $queryBuilder->createNamedParameter($this->sourceIdentifier, \PDO::PARAM_STR))
+                $queryBuilder->expr()->eq(
+                    'import_source',
+                    $queryBuilder->createNamedParameter($this->sourceIdentifier, \PDO::PARAM_STR)
+                )
             )
             ->execute()
             ->fetchAll();
