@@ -24,6 +24,7 @@ class NewsImporter extends BaseImporter
             'findCategoriesByImportSource' => $this->sourceIdentifier
         ];
         $germanPosts = $this->getGermanPosts($pid);
+        //die(var_dump($germanPosts));
         $importService->import($germanPosts, [], $settings);
 
         $importedGermanPosts = $this->newsRepository->getNews();
@@ -45,6 +46,9 @@ class NewsImporter extends BaseImporter
             }
         }
 
+        $allImportedNews = $this->newsRepository->getNews();
+        //die(var_dump(count($allImportedNews)));
+
         return count(
                 $importedGermanPosts
             ) . ' german posts and ' . $englishPosts . ' english translations were imported.';
@@ -63,7 +67,7 @@ class NewsImporter extends BaseImporter
                 'title' => $row['post_title'],
                 'path_segment' => $row['post_name'],
                 'pid' => $pid,
-                'media' => $this->getAttachments($row['ID']),
+                //'media' => $this->getAttachments($row['ID']),
                 'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_date_gmt'])->getTimestamp(),
                 'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $row['post_modified'])->getTimestamp(),
                 'sys_language_uid' => 0
@@ -71,7 +75,7 @@ class NewsImporter extends BaseImporter
             $this->addContent($row['post_content'], $single);
             $this->addRelations($row['ID'], $single);
 
-            $this->cleanup($single);
+            $this->cleanup($single, $row['ID']);
             $items[] = $single;
         }
 
@@ -94,14 +98,14 @@ class NewsImporter extends BaseImporter
                 'title' => $entry['post_title'],
                 'path_segment' => $entry['post_name'],
                 'pid' => $pid,
-                'media' => $this->getAttachments($entry['ID']),
+                //'media' => $this->getAttachments($entry['ID']),
                 'datetime' => \DateTime::createFromFormat('Y-m-d H:i:s', $entry['post_date_gmt'])->getTimestamp(),
                 'tstamp' => \DateTime::createFromFormat('Y-m-d H:i:s', $entry['post_modified'])->getTimestamp(),
             ];
             $this->addContent($entry['post_content'], $single);
             $this->addRelations($entry['ID'], $single);
 
-            $this->cleanup($single);
+            $this->cleanup($single, $entry['ID']);
 
             $item = $single;
         }
@@ -109,14 +113,18 @@ class NewsImporter extends BaseImporter
         return $item;
     }
 
-    protected function cleanup(array &$row): void
+    protected function cleanup(array &$row, $id): void
     {
         $pattern = '/(<p>)?\[caption(.*?)\[\/caption\](<\/p>)?/s';
         $removals = ['<!-- /wp:more -->', '<!-- /wp:tadv/classic-paragraph -->', '<!-- wp:tadv/classic-paragraph -->'];
         foreach (['title', 'bodytext'] as $field) {
             $row[$field] = trim(str_replace($removals, '', $row[$field]));
-            $row[$field] = preg_replace($pattern, '', $row[$field], 1);
+            //$row[$field] = preg_replace($pattern, '', $row[$field], 1);
+            $row[$field] = preg_replace('/(&nbsp;\s+)/', '', $row[$field]);
+            //die(var_dump($row['bodytext']));
+            //$this->parseBodyTextInContentElements($row[$field]);
         }
+        //$this->parseBodyTextInContentElements($id, $row['bodytext']);
     }
 
     protected function addRelations(int $id, array &$row): void
@@ -159,7 +167,7 @@ class NewsImporter extends BaseImporter
         $row['bodytext'] = trim($content);
     }
 
-    protected function getAttachments(int $id): array
+    /*protected function getAttachments(int $id): array
     {
         $media = [];
 
@@ -180,7 +188,7 @@ class NewsImporter extends BaseImporter
         return $media;
     }
 
-    protected function getFile(string $file)
+    protected function getFile(string $file): string
     {
         if (!$file) {
             return '';
@@ -202,7 +210,7 @@ class NewsImporter extends BaseImporter
         }
 
         return '/fileadmin/Scilog/' . $identifier;
-    }
+    }*/
 
     private function fillRelations(): void
     {
@@ -223,4 +231,50 @@ class NewsImporter extends BaseImporter
             $this->categories[$row['title']] = $row['import_id'];
         }
     }
+
+
+
+    private function startsWithCaption(string $bodytext): bool
+    {
+        return preg_match('/^(<p>)?\[caption\b/', $bodytext) === 1;
+    }
+
+    private function startsWithGallery(string $bodytext): bool
+    {
+        return preg_match('/^\[gallery\b/', $bodytext) === 1;
+    }
+
+    private function createFalMediaSysFileReference(int $pid, string $attachmentUid, int $newsItemUid): void
+    {
+        $data =
+            [
+                'pid' => $pid,
+                'uid_local' => $attachmentUid,
+                'uid_foreign' => $newsItemUid,
+                'tablenames' => 'tx_news_domain_model_news',
+                'fieldname' => 'fal_media',
+                'table_local' => 'sys_file',
+            ];
+        $this->dataHandler->createRecord($data, 'sys_file_reference');
+    }
+
+    /*private function createGalleryContentElementSysFileReference(string $attachmentsUids): void
+    {
+        $dataTtContent =
+            [
+                'uid_local' => $uidLocal,
+                'tx_news_related_news' => $uidNews,
+                'pid' => $pid,
+                'CType' => 'image-gallery',
+            ];
+        $dataReference =
+            [
+                'uid_local' => $uidLocal,
+                'uid_foreign' => $uidForeign,
+                'tablenames' => 'tt_content',
+                'fieldname' => 'fal_media',
+            ];
+        $this->dataHandler->createRecord($dataTtContent, 'tt_content');
+        $this->dataHandler->createRecord($dataReference, 'sys_file_reference');
+    }*/
 }
