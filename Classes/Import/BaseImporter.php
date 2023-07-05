@@ -14,7 +14,6 @@ use TYPO3\CMS\Extbase\Object\ObjectManager;
 
 class BaseImporter
 {
-
     protected ObjectManager $objectManager;
     protected Connection $connection;
     protected string $sourceIdentifier;

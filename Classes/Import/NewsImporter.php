@@ -11,7 +11,6 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 class NewsImporter extends BaseImporter
 {
-
     protected array $categories = [];
 
     public function run(int $pid): string
@@ -24,19 +23,19 @@ class NewsImporter extends BaseImporter
             'findCategoriesByImportSource' => $this->sourceIdentifier
         ];
         $germanPosts = $this->getGermanPosts($pid);
-        //die(var_dump($germanPosts));
         $importService->import($germanPosts, [], $settings);
 
         $importedGermanPosts = $this->newsRepository->getNews();
 
         $englishPosts = 0;
-
+        $this->dataHandler->createRecord(['title'=>'HELLO'],'tx_news_domain_model_news');
         foreach ($importedGermanPosts as $germanPost) {
             $uidsOfGermanPostsThatHaveAnEnglishTranslation =
                 $this->wordPressRepository->getUidOfPostsThatHaveAnEnglishTranslation();
             if (in_array((int)$germanPost['import_id'], $uidsOfGermanPostsThatHaveAnEnglishTranslation, true)) {
-                $this->dataHandler->localizeRecord($germanPost['uid'], 'tx_news_domain_model_news', 1);
-
+                //$this->dataHandler->localizeRecordAndProvideNewUid($germanPost['uid'], 'tx_news_domain_model_news', 1);
+                $this->dataHandler->localize('tx_news_domain_model_news', $germanPost['uid'], 1);
+                //localizeRecordAndProvideNewUid($germanPost['uid'], 'tx_news_domain_model_news', 1);
                 $importedPost = $this->newsRepository->getLocalizedEnglishPost($germanPost['uid']);
                 foreach ($importedPost as $englishPost) {
                     $data = $this->getDataToBeChangedForLocalizedEnglishPost($pid, (int)$germanPost['import_id'],);
@@ -45,10 +44,6 @@ class NewsImporter extends BaseImporter
                 $englishPosts++;
             }
         }
-
-        $allImportedNews = $this->newsRepository->getNews();
-        //die(var_dump(count($allImportedNews)));
-
         return count(
                 $importedGermanPosts
             ) . ' german posts and ' . $englishPosts . ' english translations were imported.';
@@ -78,7 +73,6 @@ class NewsImporter extends BaseImporter
             $this->cleanup($single, $row['ID']);
             $items[] = $single;
         }
-
         return $items;
     }
 
@@ -232,6 +226,53 @@ class NewsImporter extends BaseImporter
         }
     }
 
+    private function parseBodyTextInContentElements($id, string $bodytext): void
+    {
+        $patternImage = '/(<p>)?\[caption(.*?)\[\/caption\](<\/p>)?/s';
+        $patternGallery = '/\[gallery[^]]*ids="([^"]+)"[^]]*\]/';
+
+        $numberOfImages = preg_match_all($patternImage, $bodytext);
+        $numberOfGalleries = preg_match_all($patternGallery, $bodytext);
+        /*var_dump(
+        'ID ' . $id . ' Number of images is ' . $numberOfImages . ' and number of galleries is ' . $numberOfGalleries . '.'
+        );*/
+        /*if ($numberOfGalleries > 1) {
+        die(var_dump('YES THERE S MULTIPLE GALLERIES TOO'));
+        }*/
+        /*$matches = [];
+        if (preg_match($patternGallery, $bodytext, $matches)) {
+        $numbersString = $matches[1];
+        $numbersArray = explode(',', $numbersString);
+
+        print_r($numbersArray);
+        } else {
+        echo "Pattern not found in the string.".PHP_EOL;
+        }*/
+        if ($this->startsWithCaption($bodytext)) {
+            $pattern = '/^(?:<p>)?\[caption id="attachment_(\d+)"[^]]*\](.*?)\[\/caption\](?:<\/p>\R)?/s';
+            preg_match($pattern, $bodytext, $matches);
+
+            if (count($matches) > 0) {
+                $attachmentUid = $matches[1];
+                $bodytext = preg_replace($pattern, '', $bodytext);
+                $bodytext = preg_replace('/^\s*\R/m', '', $bodytext);
+
+            }
+        }
+        if ($this->startsWithGallery($bodytext)) {
+            $pattern = '/^\[gallery[^]]*ids="([^"]+)"[^]]*\](?:\R\s*)*/m';
+            preg_match($pattern, $bodytext, $matches);
+
+            if (count($matches) > 0) {
+                $attachmentUids = explode(',', $matches[1]);
+                $bodytext = preg_replace('/^\[gallery[^]]*\](?:\R\s*)*/m', '', $bodytext, 1);
+                $bodytext = trim($bodytext);
+
+
+            }
+        }
+    }
+
 
 
     private function startsWithCaption(string $bodytext): bool
@@ -243,6 +284,8 @@ class NewsImporter extends BaseImporter
     {
         return preg_match('/^\[gallery\b/', $bodytext) === 1;
     }
+
+    //prrivate function getMigrationUidOfThe
 
     private function createFalMediaSysFileReference(int $pid, string $attachmentUid, int $newsItemUid): void
     {
