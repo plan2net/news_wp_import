@@ -22,21 +22,25 @@ class NewsImporter extends BaseImporter
         $settings = [
             'findCategoriesByImportSource' => $this->sourceIdentifier
         ];
+        //Import german posts from WP
         $germanPosts = $this->getGermanPosts($pid);
         $importService->import($germanPosts, [], $settings);
 
+        //Get german imported news
         $importedGermanPosts = $this->newsRepository->getNews();
 
         $englishPosts = 0;
-        $this->dataHandler->createRecord(['title'=>'HELLO'],'tx_news_domain_model_news');
         foreach ($importedGermanPosts as $germanPost) {
+            //Get uids of german posts that have a translation
             $uidsOfGermanPostsThatHaveAnEnglishTranslation =
                 $this->wordPressRepository->getUidOfPostsThatHaveAnEnglishTranslation();
+            //Check if the current post has an english translation
             if (in_array((int)$germanPost['import_id'], $uidsOfGermanPostsThatHaveAnEnglishTranslation, true)) {
-                //$this->dataHandler->localizeRecordAndProvideNewUid($germanPost['uid'], 'tx_news_domain_model_news', 1);
+                //If yes, localize it (doesn't work at the moment)
                 $this->dataHandler->localize('tx_news_domain_model_news', $germanPost['uid'], 1);
-                //localizeRecordAndProvideNewUid($germanPost['uid'], 'tx_news_domain_model_news', 1);
+                //Retrieve the current localised post
                 $importedPost = $this->newsRepository->getLocalizedEnglishPost($germanPost['uid']);
+                //Overwrite the data of the localised post with the Worpress information
                 foreach ($importedPost as $englishPost) {
                     $data = $this->getDataToBeChangedForLocalizedEnglishPost($pid, (int)$germanPost['import_id'],);
                     $this->dataHandler->editRecord($englishPost['uid'], $data, 'tx_news_domain_model_news');
@@ -44,6 +48,7 @@ class NewsImporter extends BaseImporter
                 $englishPosts++;
             }
         }
+
         return count(
                 $importedGermanPosts
             ) . ' german posts and ' . $englishPosts . ' english translations were imported.';
@@ -51,6 +56,8 @@ class NewsImporter extends BaseImporter
 
     private function getGermanPosts(int $pid): array
     {
+        //Media and attachment related functions were commented out because of trying a different approach
+        //The original import any image that comes first and sets it as fal_media, even if its in a gallery
         $items = [];
         foreach ($this->wordPressRepository->getPostsGermanLanguage() as $row) {
             $single = [
@@ -73,6 +80,7 @@ class NewsImporter extends BaseImporter
             $this->cleanup($single, $row['ID']);
             $items[] = $single;
         }
+
         return $items;
     }
 
@@ -113,10 +121,7 @@ class NewsImporter extends BaseImporter
         $removals = ['<!-- /wp:more -->', '<!-- /wp:tadv/classic-paragraph -->', '<!-- wp:tadv/classic-paragraph -->'];
         foreach (['title', 'bodytext'] as $field) {
             $row[$field] = trim(str_replace($removals, '', $row[$field]));
-            //$row[$field] = preg_replace($pattern, '', $row[$field], 1);
             $row[$field] = preg_replace('/(&nbsp;\s+)/', '', $row[$field]);
-            //die(var_dump($row['bodytext']));
-            //$this->parseBodyTextInContentElements($row[$field]);
         }
         //$this->parseBodyTextInContentElements($id, $row['bodytext']);
     }
@@ -233,30 +238,25 @@ class NewsImporter extends BaseImporter
 
         $numberOfImages = preg_match_all($patternImage, $bodytext);
         $numberOfGalleries = preg_match_all($patternGallery, $bodytext);
-        /*var_dump(
+        /*
+        Here can be checked how many images and galleries each posts has
+        var_dump(
         'ID ' . $id . ' Number of images is ' . $numberOfImages . ' and number of galleries is ' . $numberOfGalleries . '.'
         );*/
-        /*if ($numberOfGalleries > 1) {
-        die(var_dump('YES THERE S MULTIPLE GALLERIES TOO'));
-        }*/
-        /*$matches = [];
-        if (preg_match($patternGallery, $bodytext, $matches)) {
-        $numbersString = $matches[1];
-        $numbersArray = explode(',', $numbersString);
 
-        print_r($numbersArray);
-        } else {
-        echo "Pattern not found in the string.".PHP_EOL;
-        }*/
         if ($this->startsWithCaption($bodytext)) {
             $pattern = '/^(?:<p>)?\[caption id="attachment_(\d+)"[^]]*\](.*?)\[\/caption\](?:<\/p>\R)?/s';
             preg_match($pattern, $bodytext, $matches);
 
             if (count($matches) > 0) {
+                //Get the import attachemnt uid from the caption tag
                 $attachmentUid = $matches[1];
+                //Create sys_file_reference record to create the fal_media relation
+                //$this->createFalMediaSysFileReference
+
+                //Clean up the first caption after creating the relationship
                 $bodytext = preg_replace($pattern, '', $bodytext);
                 $bodytext = preg_replace('/^\s*\R/m', '', $bodytext);
-
             }
         }
         if ($this->startsWithGallery($bodytext)) {
@@ -264,16 +264,18 @@ class NewsImporter extends BaseImporter
             preg_match($pattern, $bodytext, $matches);
 
             if (count($matches) > 0) {
+                //Get the import uids from the media that has to be added to the gallery conent element
                 $attachmentUids = explode(',', $matches[1]);
+
+                //Here should be the tt_content and sys file refference created
+                //$this->createGalleryContentElementSysFileReference
+
+                //Clean up the first gallery tag after creating the relationship
                 $bodytext = preg_replace('/^\[gallery[^]]*\](?:\R\s*)*/m', '', $bodytext, 1);
                 $bodytext = trim($bodytext);
-
-
             }
         }
     }
-
-
 
     private function startsWithCaption(string $bodytext): bool
     {
@@ -285,14 +287,12 @@ class NewsImporter extends BaseImporter
         return preg_match('/^\[gallery\b/', $bodytext) === 1;
     }
 
-    //prrivate function getMigrationUidOfThe
-
-    private function createFalMediaSysFileReference(int $pid, string $attachmentUid, int $newsItemUid): void
+    private function createFalMediaSysFileReference(int $pid, string $fileUid, int $newsItemUid): void
     {
         $data =
             [
                 'pid' => $pid,
-                'uid_local' => $attachmentUid,
+                'uid_local' => $fileUid,
                 'uid_foreign' => $newsItemUid,
                 'tablenames' => 'tx_news_domain_model_news',
                 'fieldname' => 'fal_media',
