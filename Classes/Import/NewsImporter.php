@@ -28,8 +28,8 @@ class NewsImporter extends BaseImporter
 
         //Get german imported news
         $importedGermanPosts = $this->newsRepository->getNews();
-
         $englishPosts = 0;
+
         foreach ($importedGermanPosts as $germanPost) {
             //Get uids of german posts that have a translation
             $uidsOfGermanPostsThatHaveAnEnglishTranslation =
@@ -37,7 +37,7 @@ class NewsImporter extends BaseImporter
             //Check if the current post has an english translation
             if (in_array((int)$germanPost['import_id'], $uidsOfGermanPostsThatHaveAnEnglishTranslation, true)) {
                 //If yes, localize it (doesn't work at the moment)
-                $this->dataHandler->localize('tx_news_domain_model_news', $germanPost['uid'], 1);
+                $this->dataHandler->localizeRecord($germanPost['uid'], 'tx_news_domain_model_news', 1);
                 //Retrieve the current localised post
                 $importedPost = $this->newsRepository->getLocalizedEnglishPost($germanPost['uid']);
                 //Overwrite the data of the localised post with the Worpress information
@@ -231,7 +231,7 @@ class NewsImporter extends BaseImporter
         }
     }
 
-    private function parseBodyTextInContentElements($id, string $bodytext): void
+    private function parseBodyTextInContentElements(int $pid, int $fileuid, int $newsItemsUid, string $bodytext): void
     {
         $patternImage = '/(<p>)?\[caption(.*?)\[\/caption\](<\/p>)?/s';
         $patternGallery = '/\[gallery[^]]*ids="([^"]+)"[^]]*\]/';
@@ -252,7 +252,7 @@ class NewsImporter extends BaseImporter
                 //Get the import attachemnt uid from the caption tag
                 $attachmentUid = $matches[1];
                 //Create sys_file_reference record to create the fal_media relation
-                //$this->createFalMediaSysFileReference
+                //$this->createFalMediaSysFileReference($pid, $fileuid, $newsItemsUid);
 
                 //Clean up the first caption after creating the relationship
                 $bodytext = preg_replace($pattern, '', $bodytext);
@@ -268,7 +268,7 @@ class NewsImporter extends BaseImporter
                 $attachmentUids = explode(',', $matches[1]);
 
                 //Here should be the tt_content and sys file refference created
-                //$this->createGalleryContentElementSysFileReference
+                //$this->createGalleryContentElementSysFileReference();
 
                 //Clean up the first gallery tag after creating the relationship
                 $bodytext = preg_replace('/^\[gallery[^]]*\](?:\R\s*)*/m', '', $bodytext, 1);
